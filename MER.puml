@@ -1,0 +1,674 @@
+@startuml modelo_er_condominio
+
+' ==========================================
+' MODELO ENTIDAD-RELACIÓN (v3)
+' Sistema de Gestión de Condominios
+' ==========================================
+
+hide circle
+skinparam linetype ortho
+skinparam roundcorner 8
+skinparam class {
+    BackgroundColor<<auth>> #FDE9E9
+    BackgroundColor<<condominio>> #E8F0FE
+    BackgroundColor<<personas>> #E9F7EF
+    BackgroundColor<<finanzas>> #FEF6E0
+    BackgroundColor<<mantenimiento>> #F3E9FE
+    BackgroundColor<<seguridad>> #FCEEEE
+    BackgroundColor<<reservas>> #E0F7FA
+    BackgroundColor<<comunicacion>> #FFF0E5
+    BackgroundColor<<asambleas>> #F0E6FA
+    BackgroundColor<<auditoria>> #ECECEC
+    BackgroundColor<<archivos>> #E4F5E9
+    BackgroundColor<<config>> #F5F5F5
+    BackgroundColor<<catalogo>> #FFF9E0
+    BorderColor #555555
+    ArrowColor #555555
+}
+
+' ==========================================
+' AUTENTICACIÓN Y AUTORIZACIÓN
+' ==========================================
+
+entity Usuario <<auth>> {
+    * id_usuario : PK
+    --
+    * id_persona : FK
+    * username
+    * password_hash
+    * estado
+    * fecha_creacion
+    ultimo_login
+    intentos_fallidos
+    bloqueado_hasta
+    token_recuperacion
+    fecha_expiracion_token
+}
+
+note right of Usuario
+  Sin campo email: el correo
+  vive únicamente en Persona,
+  evita duplicación/desincronía.
+end note
+
+entity Rol <<auth>> {
+    * id_rol : PK
+    --
+    * nombre
+    descripcion
+}
+
+entity UsuarioRol <<auth>> {
+    * id_usuario : FK
+    * id_rol : FK
+    --
+    fecha_asignacion
+}
+
+entity Permiso <<auth>> {
+    * id_permiso : PK
+    --
+    * nombre
+    * modulo
+    * accion
+}
+
+entity RolPermiso <<auth>> {
+    * id_rol : FK
+    * id_permiso : FK
+}
+
+entity Login <<auth>> {
+    * id_login : PK
+    --
+    * id_usuario : FK
+    * ip
+    * fecha
+    * exitoso
+}
+
+entity RefreshToken <<auth>> {
+    * id_refresh_token : PK
+    --
+    * id_usuario : FK
+    * token
+    * fecha_expiracion
+    * revocado
+    fecha_creacion
+}
+
+' ==========================================
+' AUDITORÍA (transversal, genérica sobre cambios de datos)
+' ==========================================
+
+entity Auditoria <<auditoria>> {
+    * id_auditoria : PK
+    --
+    * tabla_afectada
+    * id_registro
+    * accion
+    * id_usuario : FK
+    valores_anteriores : JSONB
+    valores_nuevos : JSONB
+    ip
+    user_agent
+    * fecha
+}
+
+' ==========================================
+' CONFIGURACIÓN DEL SISTEMA
+' ==========================================
+
+entity Configuracion <<config>> {
+    * id_configuracion : PK
+    --
+    * clave
+    * valor
+}
+
+note right of Configuracion
+  Ejemplos:
+  DIAS_MORA = 30
+  PORCENTAJE_INTERES = 5
+  SMTP_HOST = ...
+end note
+
+' ==========================================
+' ARCHIVOS (genérico y reutilizable)
+' ==========================================
+
+entity Archivo <<archivos>> {
+    * id_archivo : PK
+    --
+    * nombre
+    * ruta
+    * tipo
+    tamano
+    * fecha
+}
+
+entity TicketArchivo <<archivos>> {
+    * id_ticket : FK
+    * id_archivo : FK
+}
+
+entity ActaArchivo <<archivos>> {
+    * id_acta : FK
+    * id_archivo : FK
+}
+
+' ==========================================
+' CATÁLOGOS DE ESTADO
+' ==========================================
+
+entity EstadoReserva <<catalogo>> {
+    * id_estado : PK
+    --
+    * nombre
+}
+note right of EstadoReserva
+  PENDIENTE / APROBADA
+  RECHAZADA / CANCELADA
+end note
+
+entity EstadoPago <<catalogo>> {
+    * id_estado : PK
+    --
+    * nombre
+}
+note right of EstadoPago
+  PENDIENTE / CONFIRMADO
+  RECHAZADO / ANULADO
+end note
+
+entity EstadoAcceso <<catalogo>> {
+    * id_estado : PK
+    --
+    * nombre
+}
+note right of EstadoAcceso
+  EN_CURSO / FINALIZADO / CANCELADO
+end note
+
+entity EstadoUnidad <<catalogo>> {
+    * id_estado : PK
+    --
+    * nombre
+}
+note right of EstadoUnidad
+  DISPONIBLE / OCUPADA
+  EN_VENTA / EN_ARRIENDO
+end note
+
+entity EstadoTicket <<catalogo>> {
+    * id_estado : PK
+    --
+    * nombre
+}
+note right of EstadoTicket
+  ABIERTO / EN_PROCESO
+  RESUELTO / CERRADO
+end note
+
+' ==========================================
+' CONDOMINIO
+' ==========================================
+
+entity Condominio <<condominio>> {
+    * id_condominio : PK
+    --
+    * nombre
+    direccion
+    telefono
+    email
+}
+
+entity Torre <<condominio>> {
+    * id_torre : PK
+    --
+    * id_condominio : FK
+    * nombre
+}
+
+entity Unidad <<condominio>> {
+    * id_unidad : PK
+    --
+    * id_condominio : FK
+    id_torre : FK "nullable"
+    id_estado : FK
+    * numero
+    piso
+    * tipo
+    alicuota
+}
+
+note right of Unidad
+  id_condominio es la fuente de verdad
+  (siempre presente).
+  id_torre es opcional: solo aplica
+  a condominios tipo edificio.
+  CHECK/trigger: si id_torre no es null,
+  Torre.id_condominio debe coincidir
+  con Unidad.id_condominio.
+end note
+
+entity Parqueadero <<condominio>> {
+    * id_parqueadero : PK
+    --
+    * id_unidad : FK
+    * numero
+    * estado
+}
+
+entity AreaComun <<reservas>> {
+    * id_area : PK
+    --
+    * id_condominio : FK
+    * nombre
+    descripcion
+    capacidad
+}
+
+' ==========================================
+' PERSONAS
+' ==========================================
+
+entity Persona <<personas>> {
+    * id_persona : PK
+    --
+    * tipo_identificacion
+    * numero_identificacion
+    * nombres
+    * apellidos
+    telefono
+    * correo
+    fecha_nacimiento
+    direccion
+    foto_perfil
+    * estado
+}
+
+note right of Persona
+  tipo_identificacion:
+  CEDULA / PASAPORTE / RUC
+end note
+
+entity PersonaUnidad <<personas>> {
+    * id_persona_unidad : PK
+    --
+    * id_persona : FK
+    * id_unidad : FK
+    * tipo
+    * estado
+    * fecha_inicio
+    fecha_fin
+}
+
+note right of PersonaUnidad
+  tipo: PROPIETARIO / ARRENDATARIO / RESIDENTE
+  estado: ACTIVO / FINALIZADO / SUSPENDIDO
+  (no depender solo de fecha_fin)
+end note
+
+entity Vehiculo <<seguridad>> {
+    * id_vehiculo : PK
+    --
+    * id_unidad : FK
+    id_persona_actual : FK "nullable"
+    * tipo
+    placa : "nullable (bicis/scooters)"
+    marca
+    modelo
+    color
+}
+
+note right of Vehiculo
+  Asociado a la Unidad (estable),
+  no solo a la Persona (cambia).
+  id_persona_actual = conductor/dueño
+  vigente, para historial.
+end note
+
+' ==========================================
+' FINANZAS
+' ==========================================
+
+entity Cuota <<finanzas>> {
+    * id_cuota : PK
+    --
+    * id_unidad : FK
+    * mes
+    * anio
+    * valor
+    * tipo
+    descripcion
+    * fecha_vencimiento
+    * estado
+}
+
+note right of Cuota
+  tipo:
+  ORDINARIA / EXTRAORDINARIA
+  MULTA / FONDO_RESERVA
+end note
+
+entity Pago <<finanzas>> {
+    * id_pago : PK
+    --
+    * id_cuota : FK
+    id_estado : FK
+    * fecha
+    * valor
+    * metodo
+    referencia
+}
+
+entity Recibo <<finanzas>> {
+    * id_recibo : PK
+    --
+    * numero
+    * id_pago : FK
+    id_archivo : FK "nullable, 1-1"
+}
+
+entity ConvenioPago <<finanzas>> {
+    * id_convenio : PK
+    --
+    * id_persona : FK
+    * id_unidad : FK
+    * monto_total
+    * num_cuotas
+    * fecha_inicio
+    * estado
+}
+
+entity Multa <<finanzas>> {
+    * id_multa : PK
+    --
+    * id_unidad : FK
+    * id_persona : FK "infractor"
+    id_cuota : FK "nullable, generada para cobro"
+    * motivo
+    descripcion
+    * valor
+    * fecha
+    * estado
+}
+
+note right of Multa
+  estado: REGISTRADA / FACTURADA / ANULADA
+  Evento de infracción, separado de Cuota
+  (que es la obligación de pago).
+  Puede generar una Cuota tipo=MULTA,
+  pero no siempre de inmediato.
+end note
+
+' ==========================================
+' MANTENIMIENTO
+' ==========================================
+
+entity Ticket <<mantenimiento>> {
+    * id_ticket : PK
+    --
+    * id_persona : FK "reportante"
+    * id_unidad : FK
+    id_tecnico : FK "Persona"
+    id_categoria : FK
+    * titulo
+    * descripcion
+    * prioridad
+    fecha_creacion
+    fecha_cierre
+}
+
+entity Categoria <<mantenimiento>> {
+    * id_categoria : PK
+    --
+    * nombre
+}
+
+entity HistorialTicket <<mantenimiento>> {
+    * id_historial : PK
+    --
+    * id_ticket : FK
+    * id_estado : FK
+    * id_usuario : FK
+    * fecha
+    comentario
+}
+
+entity TicketComentario <<mantenimiento>> {
+    * id_comentario : PK
+    --
+    * id_ticket : FK
+    * id_persona : FK
+    * comentario
+    * fecha
+}
+
+' ==========================================
+' SEGURIDAD (visitas)
+' ==========================================
+
+entity Visitante <<seguridad>> {
+    * id_visitante : PK
+    --
+    * nombre
+    cedula
+    telefono
+}
+
+entity VisitantePreautorizado <<seguridad>> {
+    * id_preautorizacion : PK
+    --
+    * id_visitante : FK
+    * id_unidad : FK
+    * autorizado_por : FK "Persona"
+    * fecha_autorizada
+}
+
+entity Acceso <<seguridad>> {
+    * id_acceso : PK
+    --
+    * id_visitante : FK
+    * id_unidad : FK
+    * id_guardia : FK "Persona"
+    id_vehiculo : FK "nullable"
+    id_preautorizacion : FK "nullable"
+    id_estado : FK
+    * hora_ingreso
+    hora_salida
+    foto
+}
+
+' ==========================================
+' RESERVAS
+' ==========================================
+
+entity Reserva <<reservas>> {
+    * id_reserva : PK
+    --
+    * id_area : FK
+    * id_persona : FK
+    id_estado : FK
+    id_usuario_aprobador : FK "nullable"
+    * fecha
+    * hora_inicio
+    * hora_fin
+    * fecha_creacion
+    motivo
+    observaciones
+}
+
+' ==========================================
+' COMUNICACIÓN
+' ==========================================
+
+entity Comunicado <<comunicacion>> {
+    * id_comunicado : PK
+    --
+    * titulo
+    * mensaje
+    * fecha
+    * id_autor : FK "Persona"
+    * destinatario_tipo
+    destinatario_id
+}
+
+note right of Comunicado
+  destinatario_tipo:
+  TODOS / TORRE / UNIDAD / ROL
+  destinatario_id: FK polimórfica
+  (según destinatario_tipo) — validación
+  a nivel de aplicación, no de BD.
+end note
+
+entity ComunicadoLectura <<comunicacion>> {
+    * id_comunicado : FK
+    * id_persona : FK
+    --
+    * fecha_lectura
+}
+
+entity Notificacion <<comunicacion>> {
+    * id_notificacion : PK
+    --
+    * id_persona : FK
+    * tipo
+    * titulo
+    * mensaje
+    * canal
+    * estado_envio
+    fecha_envio
+    * leido
+    fecha_lectura
+}
+
+' ==========================================
+' ASAMBLEAS
+' ==========================================
+
+entity Asamblea <<asambleas>> {
+    * id_asamblea : PK
+    --
+    * id_condominio : FK
+    * fecha
+    * tipo
+    quorum_requerido
+    * estado
+}
+
+entity Votacion <<asambleas>> {
+    * id_votacion : PK
+    --
+    * id_asamblea : FK
+    * id_persona : FK
+    * opcion
+    * fecha
+}
+
+entity Acta <<asambleas>> {
+    * id_acta : PK
+    --
+    * id_asamblea : FK
+    contenido
+}
+
+' ==========================================
+' RELACIONES
+' ==========================================
+
+' Autenticación
+Persona            ||--o| Usuario           : "tiene login"
+Usuario            }o--o{ UsuarioRol        : ""
+Rol                }o--o{ UsuarioRol        : ""
+Rol                }o--o{ RolPermiso        : ""
+Permiso            }o--o{ RolPermiso        : ""
+Usuario            ||--o{ Login             : "intentos"
+Usuario            ||--o{ RefreshToken      : ""
+Usuario            ||--o{ Auditoria         : "genera"
+
+' Archivos
+Ticket             }o--o{ TicketArchivo     : ""
+Archivo            }o--o{ TicketArchivo     : ""
+Acta               }o--o{ ActaArchivo       : ""
+Archivo            }o--o{ ActaArchivo       : ""
+Archivo            |o--o| Recibo            : "opcional 1-1"
+
+' Condominio
+Condominio         ||--o{ Torre             : ""
+Condominio         ||--o{ Unidad            : "fuente de verdad"
+Torre              |o--o{ Unidad            : "opcional"
+EstadoUnidad       ||--o{ Unidad            : ""
+Unidad             ||--o{ Parqueadero       : ""
+Condominio         ||--o{ AreaComun         : ""
+
+' Personas
+Persona            ||--o{ PersonaUnidad     : ""
+Unidad             ||--o{ PersonaUnidad     : ""
+Unidad             ||--o{ Vehiculo          : ""
+Persona            |o--o{ Vehiculo          : "conductor actual"
+
+' Finanzas
+Unidad             ||--o{ Cuota             : ""
+Cuota              ||--o{ Pago              : ""
+EstadoPago         ||--o{ Pago              : ""
+Persona            ||--o{ ConvenioPago      : ""
+Unidad             ||--o{ ConvenioPago      : ""
+Unidad             ||--o{ Multa             : ""
+Persona            ||--o{ Multa             : "infractor"
+Cuota              |o--o| Multa             : "generada (opcional)"
+
+' Mantenimiento
+Persona            ||--o{ Ticket            : "reporta"
+Unidad             ||--o{ Ticket            : ""
+Persona            |o--o{ Ticket            : "atiende (técnico)"
+Categoria          |o--o{ Ticket            : ""
+Ticket             ||--o{ HistorialTicket   : ""
+EstadoTicket       ||--o{ HistorialTicket   : ""
+Usuario            ||--o{ HistorialTicket   : "registra"
+Ticket             ||--o{ TicketComentario  : ""
+Persona            ||--o{ TicketComentario  : ""
+
+' Seguridad
+Visitante          ||--o{ VisitantePreautorizado : ""
+Unidad             ||--o{ VisitantePreautorizado : ""
+Persona            ||--o{ VisitantePreautorizado : "autoriza"
+Visitante          ||--o{ Acceso            : ""
+Unidad             ||--o{ Acceso            : ""
+Persona            ||--o{ Acceso            : "guardia"
+Vehiculo           |o--o{ Acceso            : "opcional"
+VisitantePreautorizado |o--o{ Acceso        : "opcional"
+EstadoAcceso       ||--o{ Acceso            : ""
+
+' Reservas
+AreaComun          ||--o{ Reserva           : ""
+Persona            ||--o{ Reserva           : ""
+EstadoReserva      ||--o{ Reserva           : ""
+Usuario            |o--o{ Reserva           : "aprueba"
+
+' Comunicación
+Persona            ||--o{ Comunicado        : "autor"
+Comunicado         ||--o{ ComunicadoLectura : ""
+Persona            ||--o{ ComunicadoLectura : ""
+Persona            ||--o{ Notificacion      : ""
+
+' Asambleas
+Condominio         ||--o{ Asamblea          : ""
+Asamblea           ||--o{ Votacion          : ""
+Persona            ||--o{ Votacion          : ""
+Asamblea           ||--o| Acta              : ""
+
+' ==========================================
+' ÍNDICES SUGERIDOS (referencia para el DDL)
+' ==========================================
+' CREATE INDEX idx_usuario_username     ON Usuario(username);
+' CREATE INDEX idx_pago_fecha           ON Pago(fecha);
+' CREATE INDEX idx_historial_ticket     ON HistorialTicket(id_ticket);
+' CREATE INDEX idx_reserva_fecha        ON Reserva(fecha);
+' CREATE INDEX idx_persona_identificacion ON Persona(numero_identificacion);
+' CREATE INDEX idx_vehiculo_placa       ON Vehiculo(placa);
+' CREATE INDEX idx_cuota_unidad_periodo ON Cuota(id_unidad, anio, mes);
+' CREATE INDEX idx_login_usuario_fecha  ON Login(id_usuario, fecha);
+
+@enduml
